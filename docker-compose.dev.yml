@@ -1,0 +1,10 @@
+# Development overrides: mount source directories, enable debug logging
+services:
+  volta-mcu:
+    volumes:
+      - ./platforms:/opt/volta/platforms
+      - ./firmware:/opt/volta/firmware
+      - ./peripherals:/opt/volta/peripherals
+    environment:
+      - LOG_LEVEL=debug
+      - RENODE_PLAIN=true

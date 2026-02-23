@@ -1,0 +1,50 @@
+# Build artifacts
+*.o
+*.bin
+*.hex
+*.map
+*.d
+
+# Rust
+bridge/target/
+
+# Python
+__pycache__/
+*.pyc
+*.egg-info/
+dist/
+build/
+.venv/
+venv/
+
+# Node
+web/node_modules/
+web/dist/
+
+# UE5
+engine/Binaries/
+engine/Intermediate/
+engine/Saved/
+engine/DerivedDataCache/
+*.uasset
+!engine/Content/**/*.uasset
+
+# Docker
+.env
+
+# IDE
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Shared memory dumps
+*.shm
+
+# Firmware build dirs (keep pre-built .elf)
+firmware/examples/*/build/

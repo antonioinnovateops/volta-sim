@@ -1,0 +1,24 @@
+:name: STM32F4_Discovery
+:description: STM32F407VG Discovery Board for Volta-Sim
+
+using sysbus
+
+mach create "STM32F4_Discovery"
+machine LoadPlatformDescription @/opt/volta/platforms/stm32f4_discovery.repl
+
+cpu PerformanceInMips 168
+
+showAnalyzer usart2
+
+# Log LED state changes
+logLevel 0 greenLED
+logLevel 0 orangeLED
+logLevel 0 redLED
+logLevel 0 blueLED
+
+# Set up GDB server on port 3333
+machine StartGdbServer 3333
+
+echo "STM32F4 Discovery platform loaded."
+echo "Use: sysbus LoadELF @<path-to-elf> to load firmware"
+echo "Use: start to begin simulation"

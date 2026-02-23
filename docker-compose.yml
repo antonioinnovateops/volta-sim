@@ -1,0 +1,31 @@
+services:
+  volta-mcu:
+    build:
+      context: .
+      dockerfile: containers/mcu/Dockerfile
+    container_name: volta-mcu
+    ports:
+      - "${RENODE_TELNET_PORT:-1234}:1234"   # Renode monitor
+      - "${RENODE_GDB_PORT:-3333}:3333"       # GDB server
+    volumes:
+      - ./platforms:/opt/volta/platforms:ro
+      - ./firmware:/opt/volta/firmware:ro
+      - ./peripherals:/opt/volta/peripherals:ro
+      - volta-shm:/dev/shm
+    tmpfs:
+      - /tmp:exec
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "bash", "-c", "echo | socat - TCP:localhost:1234,connect-timeout=2"]
+      interval: 10s
+      timeout: 5s
+      retries: 3
+      start_period: 15s
+
+volumes:
+  volta-shm:
+    driver: local
+    driver_opts:
+      type: tmpfs
+      device: tmpfs
+      o: size=1m

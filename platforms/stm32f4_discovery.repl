@@ -1,0 +1,24 @@
+// STM32F4 Discovery Board for Volta-Sim
+// Extends Renode's built-in STM32F4 SoC definition with board-level components
+
+using "platforms/cpus/stm32f4.repl"
+
+// LEDs on GPIO Port D (PD12=green, PD13=orange, PD14=red, PD15=blue)
+greenLED: Miscellaneous.LED @ gpioPortD
+orangeLED: Miscellaneous.LED @ gpioPortD
+redLED: Miscellaneous.LED @ gpioPortD
+blueLED: Miscellaneous.LED @ gpioPortD
+
+gpioPortD:
+    12 -> greenLED@0
+    13 -> orangeLED@0
+    14 -> redLED@0
+    15 -> blueLED@0
+
+// User button on PA0
+userButton: Miscellaneous.Button @ gpioPortA
+    -> gpioPortA@0
+
+// Override SysTick frequency to 16MHz (HSI) to match bare-metal firmware
+nvic:
+    systickFrequency: 16000000
