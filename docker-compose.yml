@@ -11,18 +11,92 @@ services:
       - "${VOLTAD_GRPC_PORT:-50051}:50051"     # gRPC control
     volumes:
       - ./platforms:/opt/volta/platforms:ro
-      - ./firmware:/opt/volta/firmware:ro
+      - ./firmware:/opt/volta/firmware
       - ./peripherals:/opt/volta/peripherals:ro
       - volta-shm:/dev/shm
     tmpfs:
       - /tmp:exec
     restart: unless-stopped
     healthcheck:
-      test: ["CMD", "bash", "-c", "echo | socat - TCP:localhost:1234,connect-timeout=2"]
+      test: ["CMD", "bash", "-c", "test -f /dev/shm/volta_peripheral_state && echo | socat - TCP:localhost:50051,connect-timeout=2"]
       interval: 10s
       timeout: 5s
       retries: 3
       start_period: 30s
+
+  volta-ue5:
+    build:
+      context: .
+      dockerfile: containers/ue5/Dockerfile
+      args:
+        GITHUB_TOKEN: ${GITHUB_TOKEN}
+        UE5_BRANCH: ${UE5_BRANCH:-5.4}
+    container_name: volta-ue5
+    depends_on:
+      volta-mcu:
+        condition: service_healthy
+    ports:
+      - "${PIXEL_STREAM_PORT:-8888}:8888"
+      - "${PIXEL_STREAM_SIGNAL_PORT:-8889}:8889"
+    volumes:
+      - volta-shm:/dev/shm
+    deploy:
+      resources:
+        reservations:
+          devices:
+            - driver: nvidia
+              count: 1
+              capabilities: [gpu, graphics, compute, utility, video]
+        limits:
+          memory: 16G
+    environment:
+      - NVIDIA_VISIBLE_DEVICES=all
+      - NVIDIA_DRIVER_CAPABILITIES=all
+    shm_size: '2g'
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD-SHELL", "curl -sf http://localhost:8888/ || exit 1"]
+      interval: 30s
+      timeout: 10s
+      retries: 5
+      start_period: 120s
+
+  volta-api:
+    build:
+      context: .
+      dockerfile: containers/api/Dockerfile
+    container_name: volta-api
+    depends_on:
+      volta-mcu:
+        condition: service_healthy
+    ports:
+      - "${API_PORT:-8080}:8080"
+    volumes:
+      - ./firmware:/opt/volta/firmware
+      - volta-shm:/dev/shm
+    environment:
+      - VOLTA_MCU_GRPC=volta-mcu:50051
+      - VOLTA_ZMQ_SUB=tcp://volta-mcu:5555
+      - VOLTA_SHM_PATH=/dev/shm/volta_peripheral_state
+      - VOLTA_LOG_LEVEL=${LOG_LEVEL:-info}
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD-SHELL", "python3 -c \"import urllib.request; urllib.request.urlopen('http://localhost:8080/health')\" || exit 1"]
+      interval: 10s
+      timeout: 5s
+      retries: 3
+      start_period: 10s
+
+  volta-web:
+    build:
+      context: .
+      dockerfile: containers/web/Dockerfile
+    container_name: volta-web
+    depends_on:
+      - volta-api
+    ports:
+      - "${WEB_PORT:-3000}:3000"
+    restart: unless-stopped
 
 volumes:
   volta-shm:

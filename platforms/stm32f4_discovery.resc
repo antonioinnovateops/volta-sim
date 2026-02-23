@@ -5,6 +5,13 @@ using sysbus
 
 # Compile and load custom peripherals before platform description
 include @/opt/volta/peripherals/VoltaGPIOBridge.cs
+include @/opt/volta/peripherals/VoltaGPIOInputBridge.cs
+# NOTE: PWM and ADC bridges are loaded conditionally — only when their
+# firmware examples use TIM1/ADC1. They cause startup issues when loaded
+# alongside the standard STM32F4 timer model. Load them explicitly via
+# the Renode monitor before flashing PWM firmware:
+#   include @/opt/volta/peripherals/VoltaPWMBridge.cs
+#   include @/opt/volta/peripherals/VoltaADCBridge.cs
 mach create "STM32F4_Discovery"
 machine LoadPlatformDescription @/opt/volta/platforms/stm32f4_discovery.repl
 

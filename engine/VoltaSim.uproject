@@ -1,0 +1,23 @@
+{
+	"FileVersion": 3,
+	"EngineAssociation": "5.4",
+	"Category": "",
+	"Description": "Volta-Sim UE5 3D visualization for MCU emulation",
+	"Modules": [
+		{
+			"Name": "VoltaSim",
+			"Type": "Runtime",
+			"LoadingPhase": "Default"
+		}
+	],
+	"Plugins": [
+		{
+			"Name": "PixelStreaming",
+			"Enabled": true
+		},
+		{
+			"Name": "PixelStreamingPlayer",
+			"Enabled": true
+		}
+	]
+}

@@ -1,6 +1,8 @@
+pub mod adc;
 pub mod gpio;
 pub mod header;
 pub mod layout;
+pub mod pwm;
 pub mod uart;
 
 use anyhow::{bail, Context, Result};
@@ -97,5 +99,29 @@ impl ShmRegion {
             current &= !(1 << pin);
         }
         self.mmap[base..base + 2].copy_from_slice(&current.to_le_bytes());
+    }
+
+    pub fn pwm_channel(&self, channel: usize) -> pwm::PwmChannelState {
+        pwm::PwmChannelState::from_shm(&self.mmap, channel)
+    }
+
+    pub fn adc_channel(&self, channel: usize) -> adc::AdcChannelState {
+        adc::AdcChannelState::from_shm(&self.mmap, channel)
+    }
+
+    /// Write an ADC value to SHM (for sensor injection from API/UE5).
+    pub fn write_adc_value(&mut self, channel: usize, raw_value: u16, voltage: f32) {
+        let base = ADC_OFFSET + channel * ADC_CHANNEL_SIZE;
+
+        // raw_value u16 at +0x00
+        self.mmap[base + ADC_RAW_VALUE..base + ADC_RAW_VALUE + 2]
+            .copy_from_slice(&raw_value.to_le_bytes());
+
+        // voltage f32 at +0x02
+        self.mmap[base + ADC_VOLTAGE..base + ADC_VOLTAGE + 4]
+            .copy_from_slice(&voltage.to_le_bytes());
+
+        // enabled u8 at +0x06
+        self.mmap[base + ADC_ENABLED] = 1;
     }
 }

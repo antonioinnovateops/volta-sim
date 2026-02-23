@@ -1,0 +1,13 @@
+{
+	"UseFrontend": true,
+	"UseMatchmaker": false,
+	"HttpPort": 8888,
+	"StreamerPort": 8889,
+	"SFUPort": 8890,
+	"LogToFile": true,
+	"LogVerbose": false,
+	"HomepageFile": "player.html",
+	"AdditionalRoutes": {},
+	"EnableWebserver": true,
+	"peerConnectionOptions": "{\"iceServers\":[{\"urls\":[\"stun:stun.l.google.com:19302\"]}]}"
+}

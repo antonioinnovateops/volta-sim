@@ -41,7 +41,8 @@ impl VoltaControl for VoltaControlService {
     ) -> Result<Response<FlashResponse>, Status> {
         let path = request.into_inner().elf_path;
         tracing::info!("gRPC: FlashFirmware path={path}");
-        // Reset machine before loading new firmware
+        // Pause, reset, load, then let caller start
+        let _ = self.renode_cmd("pause");
         let _ = self.renode_cmd("machine Reset");
         let resp = self.renode_cmd(&format!("sysbus LoadELF @{path}"))?;
         Ok(Response::new(FlashResponse {
@@ -91,5 +92,23 @@ impl VoltaControl for VoltaControlService {
             state: state.into(),
             message: message.into(),
         }))
+    }
+
+    async fn run_command(
+        &self,
+        request: Request<CommandRequest>,
+    ) -> Result<Response<CommandResponse>, Status> {
+        let cmd = request.into_inner().command;
+        tracing::info!("gRPC: RunCommand cmd={cmd}");
+        match self.renode_cmd(&cmd) {
+            Ok(output) => Ok(Response::new(CommandResponse {
+                success: true,
+                output,
+            })),
+            Err(e) => Ok(Response::new(CommandResponse {
+                success: false,
+                output: format!("{e}"),
+            })),
+        }
     }
 }

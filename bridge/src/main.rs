@@ -13,15 +13,23 @@ use clap::Parser;
 use tracing::{debug, error, info};
 
 use config::Config;
-use events::{GpioChangeEvent, UartDataEvent, ZmqPublisher};
+use events::{AdcChangeEvent, GpioChangeEvent, PwmUpdateEvent, UartDataEvent, ZmqPublisher};
+use shm::adc::AdcChannelState;
 use shm::gpio::GpioPortState;
 use shm::layout;
+use shm::pwm::PwmChannelState;
 use shm::ShmRegion;
 
 /// GPIO ports to monitor (index, label).
 const MONITORED_PORTS: &[(usize, &str)] = &[
     (layout::PORT_D, "D"), // LEDs on PD12-15
 ];
+
+/// PWM channels to monitor.
+const MONITORED_PWM: &[usize] = &[0]; // TIM1 CH1
+
+/// ADC channels to monitor.
+const MONITORED_ADC: &[usize] = &[0]; // ADC1 CH0
 
 fn main() -> Result<()> {
     // Init logging
@@ -146,6 +154,39 @@ fn shm_monitor_loop(
         })
         .collect();
 
+    // Cached PWM state per monitored channel
+    let mut pwm_cached: Vec<(usize, PwmChannelState)> = MONITORED_PWM
+        .iter()
+        .map(|&ch| {
+            (
+                ch,
+                PwmChannelState {
+                    duty_cycle: 0.0,
+                    frequency: 0,
+                    enabled: false,
+                    polarity: 0,
+                    period_us: 0,
+                },
+            )
+        })
+        .collect();
+
+    // Cached ADC state per monitored channel
+    let mut adc_cached: Vec<(usize, AdcChannelState)> = MONITORED_ADC
+        .iter()
+        .map(|&ch| {
+            (
+                ch,
+                AdcChannelState {
+                    raw_value: 0,
+                    voltage: 0.0,
+                    enabled: false,
+                    sample_rate: 0,
+                },
+            )
+        })
+        .collect();
+
     let mut last_seq = shm.sequence();
 
     loop {
@@ -208,6 +249,59 @@ fn shm_monitor_loop(
             }
 
             *prev = current;
+        }
+
+        // Check each monitored PWM channel for changes
+        for entry in pwm_cached.iter_mut() {
+            let (ch, ref mut prev) = *entry;
+            let current = shm.pwm_channel(ch);
+
+            if current != *prev {
+                debug!(
+                    "PWM change: ch={} duty={:.2} freq={} enabled={}",
+                    ch, current.duty_cycle, current.frequency, current.enabled
+                );
+
+                let event = PwmUpdateEvent {
+                    channel: ch,
+                    duty_cycle: current.duty_cycle,
+                    frequency: current.frequency,
+                    enabled: current.enabled,
+                    polarity: current.polarity,
+                    period_us: current.period_us,
+                };
+                if let Err(e) = zmq_pub.publish_pwm_update(&event) {
+                    error!("ZMQ publish failed: {e}");
+                }
+
+                *prev = current;
+            }
+        }
+
+        // Check each monitored ADC channel for changes
+        for entry in adc_cached.iter_mut() {
+            let (ch, ref mut prev) = *entry;
+            let current = shm.adc_channel(ch);
+
+            if current != *prev {
+                debug!(
+                    "ADC change: ch={} raw={} voltage={:.3}",
+                    ch, current.raw_value, current.voltage
+                );
+
+                let event = AdcChangeEvent {
+                    channel: ch,
+                    raw_value: current.raw_value,
+                    voltage: current.voltage,
+                    enabled: current.enabled,
+                    sample_rate: current.sample_rate,
+                };
+                if let Err(e) = zmq_pub.publish_adc_change(&event) {
+                    error!("ZMQ publish failed: {e}");
+                }
+
+                *prev = current;
+            }
         }
     }
 }

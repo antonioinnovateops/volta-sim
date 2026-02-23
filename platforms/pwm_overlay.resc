@@ -1,0 +1,17 @@
+# PWM/ADC overlay — loads PWM and ADC bridges on demand.
+# Run this BEFORE flashing PWM firmware.
+# Usage via Renode monitor:
+#   include @/opt/volta/platforms/pwm_overlay.resc
+
+# Compile bridge peripherals
+include @/opt/volta/peripherals/VoltaPWMBridge.cs
+include @/opt/volta/peripherals/VoltaADCBridge.cs
+
+# Replace built-in timer1 (Timers.STM32_Timer @ 0x40010000)
+# with our PWM bridge that captures duty/freq to SHM
+sysbus Unregister timer1
+
+# Load the overlay platform description
+machine LoadPlatformDescription @/opt/volta/platforms/pwm_overlay.repl
+
+echo "PWM and ADC bridges loaded. Ready for PWM firmware."

@@ -1,0 +1,8 @@
+// PWM/ADC overlay — defines bridge peripherals for PWM firmware.
+// Loaded by pwm_overlay.resc after unregistering built-in timer1.
+
+voltaPwmTimer1: Miscellaneous.VoltaPWMBridge @ sysbus 0x40010000
+    pwmChannelIndex: 0
+    timerClockHz: 16000000
+
+voltaAdc1: Analog.VoltaADCBridge @ sysbus 0x40012000

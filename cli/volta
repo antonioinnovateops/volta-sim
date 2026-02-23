@@ -1,0 +1,249 @@
+#!/usr/bin/env python3
+"""volta — CLI tool for Volta-Sim hardware-in-the-loop simulation."""
+
+import argparse
+import json
+import sys
+import urllib.error
+import urllib.request
+
+API_BASE = "http://localhost:8080/api/v1"
+
+
+def api_get(path: str) -> dict:
+    try:
+        with urllib.request.urlopen(f"{API_BASE}{path}") as resp:
+            return json.loads(resp.read())
+    except urllib.error.URLError as e:
+        print(f"Error: Cannot reach Volta API at {API_BASE}", file=sys.stderr)
+        print(f"  Is the stack running? (make up)", file=sys.stderr)
+        print(f"  Detail: {e}", file=sys.stderr)
+        sys.exit(1)
+
+
+def api_post(path: str, data: dict | None = None) -> dict:
+    body = json.dumps(data or {}).encode() if data else b""
+    req = urllib.request.Request(
+        f"{API_BASE}{path}",
+        data=body,
+        headers={"Content-Type": "application/json"},
+        method="POST",
+    )
+    try:
+        with urllib.request.urlopen(req) as resp:
+            return json.loads(resp.read())
+    except urllib.error.URLError as e:
+        print(f"Error: Cannot reach Volta API at {API_BASE}", file=sys.stderr)
+        print(f"  Detail: {e}", file=sys.stderr)
+        sys.exit(1)
+
+
+def api_post_form(path: str, fields: dict) -> dict:
+    """POST with application/x-www-form-urlencoded."""
+    body = "&".join(f"{k}={v}" for k, v in fields.items()).encode()
+    req = urllib.request.Request(
+        f"{API_BASE}{path}",
+        data=body,
+        headers={"Content-Type": "application/x-www-form-urlencoded"},
+        method="POST",
+    )
+    try:
+        with urllib.request.urlopen(req) as resp:
+            return json.loads(resp.read())
+    except urllib.error.URLError as e:
+        print(f"Error: {e}", file=sys.stderr)
+        sys.exit(1)
+
+
+def cmd_flash(args):
+    elf_path = args.binary
+    # If it's a local path, map it to container path
+    if not elf_path.startswith("/opt/volta"):
+        elf_path = f"/opt/volta/{elf_path}"
+
+    print(f"Flashing {elf_path}...")
+    result = api_post_form("/firmware/flash", {
+        "elf_path": elf_path,
+        "start": "true" if args.start else "false",
+    })
+
+    if result.get("success"):
+        print(f"  OK: {result.get('message', 'Firmware loaded')}")
+        if result.get("simulation_started"):
+            print("  Simulation started")
+    else:
+        print(f"  FAILED: {result.get('message', 'Unknown error')}", file=sys.stderr)
+        sys.exit(1)
+
+
+def cmd_start(_args):
+    result = api_post("/simulation/start")
+    print(f"Simulation: {result.get('state', 'unknown')}")
+
+
+def cmd_stop(_args):
+    result = api_post("/simulation/stop")
+    print(f"Simulation: {result.get('state', 'unknown')}")
+
+
+def cmd_status(_args):
+    result = api_get("/simulation/status")
+    print(f"State: {result.get('state', 'unknown')}")
+    if result.get("message"):
+        print(f"Message: {result['message']}")
+
+
+def cmd_gpio(_args):
+    result = api_get("/gpio")
+    if "error" in result:
+        print(f"Error: {result['error']}", file=sys.stderr)
+        sys.exit(1)
+
+    ports = result.get("ports", {})
+    if not ports:
+        print("No active GPIO pins")
+        return
+
+    for port, data in sorted(ports.items()):
+        for pin in data.get("pins", []):
+            out = pin["output"]
+            inp = pin["input"]
+            marker = "*" if out == "HIGH" else " "
+            print(f"  {marker} P{port}{pin['pin']:2d}  out={out:<4s}  in={inp}")
+
+
+def cmd_uart(args):
+    channel = args.channel
+    result = api_get(f"/uart/{channel}/buffer")
+    if "error" in result:
+        print(f"Error: {result['error']}", file=sys.stderr)
+        sys.exit(1)
+
+    print(f"UART{channel} ({result.get('length', 0)} bytes):")
+    print(result.get("data", ""))
+
+
+def cmd_pwm(args):
+    if args.channel is not None:
+        result = api_get(f"/pwm/{args.channel}")
+    else:
+        result = api_get("/pwm")
+
+    if "error" in result:
+        print(f"Error: {result['error']}", file=sys.stderr)
+        sys.exit(1)
+
+    if "channels" in result:
+        channels = result["channels"]
+        if not channels:
+            print("No active PWM channels")
+            return
+        for ch in channels:
+            en = "ON" if ch["enabled"] else "OFF"
+            print(f"  PWM{ch['channel']}  duty={ch['duty_cycle']:.2f}  "
+                  f"freq={ch['frequency']}Hz  {en}")
+    else:
+        ch = result
+        en = "ON" if ch.get("enabled") else "OFF"
+        print(f"  PWM{ch['channel']}  duty={ch['duty_cycle']:.2f}  "
+              f"freq={ch['frequency']}Hz  {en}")
+
+
+def cmd_adc(args):
+    if args.inject is not None:
+        channel = args.channel if args.channel is not None else 0
+        result = api_post(f"/adc/{channel}/inject", {"voltage": args.inject})
+        if "error" in result:
+            print(f"Error: {result['error']}", file=sys.stderr)
+            sys.exit(1)
+        print(f"  ADC{channel}  injected: {result['voltage']:.3f}V "
+              f"(raw={result['raw_value']})")
+        return
+
+    if args.channel is not None:
+        result = api_get(f"/adc/{args.channel}")
+    else:
+        result = api_get("/adc")
+
+    if "error" in result:
+        print(f"Error: {result['error']}", file=sys.stderr)
+        sys.exit(1)
+
+    if "channels" in result:
+        channels = result["channels"]
+        if not channels:
+            print("No active ADC channels")
+            return
+        for ch in channels:
+            en = "ON" if ch["enabled"] else "OFF"
+            print(f"  ADC{ch['channel']}  raw={ch['raw_value']:4d}  "
+                  f"voltage={ch['voltage']:.3f}V  {en}")
+    else:
+        ch = result
+        en = "ON" if ch.get("enabled") else "OFF"
+        print(f"  ADC{ch['channel']}  raw={ch['raw_value']:4d}  "
+              f"voltage={ch['voltage']:.3f}V  {en}")
+
+
+def main():
+    parser = argparse.ArgumentParser(
+        prog="volta",
+        description="Volta-Sim CLI",
+    )
+    parser.add_argument(
+        "--api", default=API_BASE, help="API base URL"
+    )
+    sub = parser.add_subparsers(dest="command", required=True)
+
+    # flash
+    p_flash = sub.add_parser("flash", help="Flash firmware to emulated MCU")
+    p_flash.add_argument("binary", help="ELF file path (local or container path)")
+    p_flash.add_argument("--no-start", dest="start", action="store_false",
+                         help="Don't start simulation after flashing")
+    p_flash.set_defaults(func=cmd_flash)
+
+    # start
+    p_start = sub.add_parser("start", help="Start simulation")
+    p_start.set_defaults(func=cmd_start)
+
+    # stop
+    p_stop = sub.add_parser("stop", help="Stop simulation")
+    p_stop.set_defaults(func=cmd_stop)
+
+    # status
+    p_status = sub.add_parser("status", help="Get simulation status")
+    p_status.set_defaults(func=cmd_status)
+
+    # gpio
+    p_gpio = sub.add_parser("gpio", help="Show GPIO pin states")
+    p_gpio.set_defaults(func=cmd_gpio)
+
+    # uart
+    p_uart = sub.add_parser("uart", help="Read UART buffer")
+    p_uart.add_argument("channel", type=int, nargs="?", default=1,
+                        help="UART channel (default: 1 = USART2)")
+    p_uart.set_defaults(func=cmd_uart)
+
+    # pwm
+    p_pwm = sub.add_parser("pwm", help="Show PWM channel states")
+    p_pwm.add_argument("channel", type=int, nargs="?", default=None,
+                       help="PWM channel (omit for all)")
+    p_pwm.set_defaults(func=cmd_pwm)
+
+    # adc
+    p_adc = sub.add_parser("adc", help="Read ADC channels or inject values")
+    p_adc.add_argument("channel", type=int, nargs="?", default=None,
+                       help="ADC channel (omit for all)")
+    p_adc.add_argument("--inject", type=float, default=None,
+                       help="Inject voltage (0-3.3V) into the channel")
+    p_adc.set_defaults(func=cmd_adc)
+
+    args = parser.parse_args()
+    if args.api != API_BASE:
+        global API_BASE
+        API_BASE = args.api
+    args.func(args)
+
+
+if __name__ == "__main__":
+    main()

@@ -31,6 +31,18 @@ gpioPortD:
 userButton: Miscellaneous.Button @ gpioPortA
     -> gpioPortA@0
 
+// SHM-bridged GPIO input (reads button state written by UE5 from SHM -> drives Renode pin)
+voltaInputBridgeA0: Miscellaneous.VoltaGPIOInputBridge @ sysbus
+    portIndex: 0
+    pinIndex: 0
+    pollIntervalMs: 1
+    Connection -> gpioPortA@0
+
+// NOTE: PWM and ADC bridges are loaded on-demand for PWM firmware.
+// See .resc comments for how to enable them.
+// voltaPwmBridge0: Miscellaneous.VoltaPWMBridge @ sysbus
+// voltaAdc1: Analog.VoltaADCBridge @ sysbus 0x40012000
+
 // Override SysTick frequency to 16MHz (HSI) to match bare-metal firmware
 nvic:
     systickFrequency: 16000000
