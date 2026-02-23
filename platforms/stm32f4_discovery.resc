@@ -3,15 +3,16 @@
 
 using sysbus
 
-# Compile and load custom VoltaGPIOBridge peripheral before platform description
+# Compile and load custom peripherals before platform description
 include @/opt/volta/peripherals/VoltaGPIOBridge.cs
-
 mach create "STM32F4_Discovery"
 machine LoadPlatformDescription @/opt/volta/platforms/stm32f4_discovery.repl
 
 cpu PerformanceInMips 168
 
-showAnalyzer usart2
+# UART output via TCP socket terminal (voltad connects to read USART2 data)
+emulation CreateServerSocketTerminal 4321 "uart2Term" false
+connector Connect usart2 uart2Term
 
 # Log SHM bridge state changes
 logLevel 0 gpioPortD.voltaGreenBridge

@@ -23,6 +23,10 @@ pub struct Config {
     #[arg(long, default_value = "127.0.0.1:1234")]
     pub renode_addr: String,
 
+    /// Renode UART socket terminal address (USART2 output)
+    #[arg(long, default_value = "127.0.0.1:4321")]
+    pub uart_addr: String,
+
     /// SHM poll interval in microseconds
     #[arg(long, default_value_t = 100)]
     pub poll_interval_us: u64,

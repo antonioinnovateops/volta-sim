@@ -28,8 +28,12 @@ pub const GPIO_PORT_COUNT: usize = 16;
 pub const GPIO_OUTPUT_STATE: usize = 0;
 pub const GPIO_INPUT_STATE: usize = 2;
 
-// UART section (Sprint 4)
+// UART section
 pub const UART_OFFSET: usize = 0x0140;
+pub const UART_CHANNEL_SIZE: usize = 1024;
+pub const UART_CHANNEL_COUNT: usize = 8;
+pub const UART_HEADER_SIZE: usize = 8; // write_head(4) + reserved(4)
+pub const UART_BUF_SIZE: usize = 1016; // UART_CHANNEL_SIZE - UART_HEADER_SIZE
 
 // Port index mapping
 pub const PORT_A: usize = 0;

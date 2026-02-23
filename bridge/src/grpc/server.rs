@@ -41,6 +41,8 @@ impl VoltaControl for VoltaControlService {
     ) -> Result<Response<FlashResponse>, Status> {
         let path = request.into_inner().elf_path;
         tracing::info!("gRPC: FlashFirmware path={path}");
+        // Reset machine before loading new firmware
+        let _ = self.renode_cmd("machine Reset");
         let resp = self.renode_cmd(&format!("sysbus LoadELF @{path}"))?;
         Ok(Response::new(FlashResponse {
             success: true,
@@ -76,9 +78,18 @@ impl VoltaControl for VoltaControlService {
         &self,
         _request: Request<StatusRequest>,
     ) -> Result<Response<StatusResponse>, Status> {
+        let resp = self.renode_cmd("emulation IsStarted")?;
+        let trimmed = resp.trim();
+        let (state, message) = if trimmed.contains("True") {
+            ("running", "Simulation is running")
+        } else if trimmed.contains("False") {
+            ("paused", "Simulation is paused")
+        } else {
+            ("unknown", "Could not determine simulation state")
+        };
         Ok(Response::new(StatusResponse {
-            state: "unknown".into(),
-            message: "Status check not yet implemented".into(),
+            state: state.into(),
+            message: message.into(),
         }))
     }
 }

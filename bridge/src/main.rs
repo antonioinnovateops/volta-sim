@@ -4,6 +4,7 @@ mod grpc;
 mod renode;
 mod shm;
 
+use std::sync::mpsc;
 use std::sync::{Arc, Mutex};
 use std::time::Duration;
 
@@ -12,12 +13,12 @@ use clap::Parser;
 use tracing::{debug, error, info};
 
 use config::Config;
-use events::{GpioChangeEvent, ZmqPublisher};
-use shm::gpio::{self, GpioPortState};
+use events::{GpioChangeEvent, UartDataEvent, ZmqPublisher};
+use shm::gpio::GpioPortState;
 use shm::layout;
 use shm::ShmRegion;
 
-/// Ports to monitor (index, label).
+/// GPIO ports to monitor (index, label).
 const MONITORED_PORTS: &[(usize, &str)] = &[
     (layout::PORT_D, "D"), // LEDs on PD12-15
 ];
@@ -37,6 +38,7 @@ fn main() -> Result<()> {
     info!("  ZMQ PUB:  {}", cfg.zmq_pub_addr);
     info!("  gRPC:     {}", cfg.grpc_addr);
     info!("  Renode:   {}", cfg.renode_addr);
+    info!("  UART:     {}", cfg.uart_addr);
     info!(
         "  Poll interval: {} μs",
         cfg.poll_interval_us
@@ -59,6 +61,35 @@ fn main() -> Result<()> {
     let renode = renode::RenodeTelnet::connect_with_retry(&cfg.renode_addr, 30)?;
     info!("Renode connected via telnet");
     let renode = Arc::new(Mutex::new(renode));
+
+    // Spawn UART socket reader thread
+    let (uart_tx, uart_rx) = mpsc::channel::<Vec<u8>>();
+    let uart_addr = cfg.uart_addr.clone();
+    std::thread::spawn(move || {
+        info!("Connecting to UART terminal at {uart_addr}...");
+        match renode::UartSocketReader::connect_with_retry(&uart_addr, 60) {
+            Ok(mut reader) => {
+                info!("UART terminal connected: {uart_addr}");
+                loop {
+                    match reader.read_available() {
+                        Some(bytes) if !bytes.is_empty() => {
+                            if uart_tx.send(bytes).is_err() {
+                                break; // receiver dropped
+                            }
+                        }
+                        Some(_) => {} // empty read (timeout), keep going
+                        None => {
+                            error!("UART terminal connection closed");
+                            break;
+                        }
+                    }
+                }
+            }
+            Err(e) => {
+                error!("Failed to connect to UART terminal: {e}");
+            }
+        }
+    });
 
     // Spawn gRPC server on Tokio runtime
     let grpc_addr = cfg.grpc_addr.clone();
@@ -87,16 +118,21 @@ fn main() -> Result<()> {
 
     // Run SHM monitor loop (blocking, main thread)
     info!("Starting SHM monitor loop ({}μs interval)", cfg.poll_interval_us);
-    shm_monitor_loop(shm, zmq_pub, cfg.poll_interval_us)?;
+    shm_monitor_loop(shm, zmq_pub, uart_rx, cfg.poll_interval_us)?;
 
     Ok(())
 }
 
-fn shm_monitor_loop(shm: ShmRegion, zmq_pub: ZmqPublisher, poll_us: u64) -> Result<()> {
+fn shm_monitor_loop(
+    shm: ShmRegion,
+    zmq_pub: ZmqPublisher,
+    uart_rx: mpsc::Receiver<Vec<u8>>,
+    poll_us: u64,
+) -> Result<()> {
     let interval = Duration::from_micros(poll_us);
 
-    // Cached state per monitored port
-    let mut cached: Vec<(usize, &str, GpioPortState)> = MONITORED_PORTS
+    // Cached GPIO state per monitored port
+    let mut gpio_cached: Vec<(usize, &str, GpioPortState)> = MONITORED_PORTS
         .iter()
         .map(|&(idx, label)| {
             (
@@ -115,14 +151,31 @@ fn shm_monitor_loop(shm: ShmRegion, zmq_pub: ZmqPublisher, poll_us: u64) -> Resu
     loop {
         std::thread::sleep(interval);
 
+        // Check for UART data from socket terminal
+        while let Ok(data) = uart_rx.try_recv() {
+            let text = String::from_utf8_lossy(&data);
+            debug!(
+                "UART[2] data: {:?} ({})",
+                text.trim(),
+                data.len()
+            );
+            let event = UartDataEvent {
+                channel: 2,
+                data,
+            };
+            if let Err(e) = zmq_pub.publish_uart_data(&event) {
+                error!("ZMQ publish failed: {e}");
+            }
+        }
+
         let seq = shm.sequence();
         if seq == last_seq {
             continue;
         }
         last_seq = seq;
 
-        // Check each monitored port for changes
-        for entry in cached.iter_mut() {
+        // Check each monitored GPIO port for changes
+        for entry in gpio_cached.iter_mut() {
             let (port_idx, port_label, ref mut prev) = *entry;
             let current = shm.gpio_port(port_idx);
 
@@ -132,7 +185,6 @@ fn shm_monitor_loop(shm: ShmRegion, zmq_pub: ZmqPublisher, poll_us: u64) -> Resu
 
             let changed = prev.changed_pins(&current);
 
-            // Publish an event for each changed pin
             for pin in 0..16u8 {
                 if changed & (1 << pin) != 0 {
                     let state = current.pin_output(pin);

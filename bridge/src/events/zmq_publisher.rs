@@ -10,6 +10,13 @@ pub struct GpioChangeEvent {
     pub sequence: u64,
 }
 
+/// A UART data event published over ZMQ.
+#[derive(Debug, Serialize)]
+pub struct UartDataEvent {
+    pub channel: usize,
+    pub data: Vec<u8>,
+}
+
 /// ZMQ PUB socket for broadcasting peripheral events.
 pub struct ZmqPublisher {
     socket: zmq::Socket,
@@ -29,6 +36,15 @@ impl ZmqPublisher {
     /// part 1 = topic string, part 2 = MessagePack payload.
     pub fn publish_gpio_change(&self, event: &GpioChangeEvent) -> Result<()> {
         let topic = "volta.gpio.change";
+        let payload = rmp_serde::to_vec(event)?;
+        self.socket.send(topic.as_bytes(), zmq::SNDMORE)?;
+        self.socket.send(&payload, 0)?;
+        Ok(())
+    }
+
+    /// Publish a UART data event.
+    pub fn publish_uart_data(&self, event: &UartDataEvent) -> Result<()> {
+        let topic = "volta.uart.data";
         let payload = rmp_serde::to_vec(event)?;
         self.socket.send(topic.as_bytes(), zmq::SNDMORE)?;
         self.socket.send(&payload, 0)?;
