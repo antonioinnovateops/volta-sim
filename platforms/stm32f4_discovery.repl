@@ -3,17 +3,29 @@
 
 using "platforms/cpus/stm32f4.repl"
 
-// LEDs on GPIO Port D (PD12=green, PD13=orange, PD14=red, PD15=blue)
-greenLED: Miscellaneous.LED @ gpioPortD
-orangeLED: Miscellaneous.LED @ gpioPortD
-redLED: Miscellaneous.LED @ gpioPortD
-blueLED: Miscellaneous.LED @ gpioPortD
+// SHM-bridged GPIO outputs (PD12=green, PD13=orange, PD14=red, PD15=blue)
+// Each bridge instance writes pin state to /dev/shm/volta_peripheral_state
+voltaGreenBridge: Miscellaneous.VoltaGPIOBridge @ gpioPortD
+    portIndex: 3
+    pinIndex: 12
+
+voltaOrangeBridge: Miscellaneous.VoltaGPIOBridge @ gpioPortD
+    portIndex: 3
+    pinIndex: 13
+
+voltaRedBridge: Miscellaneous.VoltaGPIOBridge @ gpioPortD
+    portIndex: 3
+    pinIndex: 14
+
+voltaBlueBridge: Miscellaneous.VoltaGPIOBridge @ gpioPortD
+    portIndex: 3
+    pinIndex: 15
 
 gpioPortD:
-    12 -> greenLED@0
-    13 -> orangeLED@0
-    14 -> redLED@0
-    15 -> blueLED@0
+    12 -> voltaGreenBridge@0
+    13 -> voltaOrangeBridge@0
+    14 -> voltaRedBridge@0
+    15 -> voltaBlueBridge@0
 
 // User button on PA0
 userButton: Miscellaneous.Button @ gpioPortA

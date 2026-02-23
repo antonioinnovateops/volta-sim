@@ -3,6 +3,9 @@
 
 using sysbus
 
+# Compile and load custom VoltaGPIOBridge peripheral before platform description
+include @/opt/volta/peripherals/VoltaGPIOBridge.cs
+
 mach create "STM32F4_Discovery"
 machine LoadPlatformDescription @/opt/volta/platforms/stm32f4_discovery.repl
 
@@ -10,15 +13,15 @@ cpu PerformanceInMips 168
 
 showAnalyzer usart2
 
-# Log LED state changes
-logLevel 0 greenLED
-logLevel 0 orangeLED
-logLevel 0 redLED
-logLevel 0 blueLED
+# Log SHM bridge state changes
+logLevel 0 gpioPortD.voltaGreenBridge
+logLevel 0 gpioPortD.voltaOrangeBridge
+logLevel 0 gpioPortD.voltaRedBridge
+logLevel 0 gpioPortD.voltaBlueBridge
 
 # Set up GDB server on port 3333
 machine StartGdbServer 3333
 
-echo "STM32F4 Discovery platform loaded."
+echo "STM32F4 Discovery platform loaded (with SHM bridge)."
 echo "Use: sysbus LoadELF @<path-to-elf> to load firmware"
 echo "Use: start to begin simulation"

@@ -1,3 +1,26 @@
+# Stage 1: Build voltad (Rust bridge daemon)
+FROM rust:1.85-bookworm AS voltad-builder
+
+RUN apt-get update && apt-get install -y --no-install-recommends \
+    libzmq3-dev \
+    protobuf-compiler \
+    pkg-config \
+    cmake \
+    && rm -rf /var/lib/apt/lists/*
+
+WORKDIR /build
+
+# Cache dependency build: copy manifests first
+COPY bridge/Cargo.toml bridge/build.rs ./
+COPY bridge/proto/ proto/
+RUN mkdir src && echo "fn main(){}" > src/main.rs \
+    && cargo build --release 2>/dev/null; exit 0
+
+# Build with real source
+COPY bridge/src/ src/
+RUN touch src/main.rs && cargo build --release
+
+# Stage 2: Runtime
 FROM ubuntu:22.04
 
 ENV DEBIAN_FRONTEND=noninteractive
@@ -12,6 +35,7 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
     gdb-multiarch \
     socat \
     make \
+    libzmq5 \
     && rm -rf /var/lib/apt/lists/*
 
 # Install Renode portable
@@ -23,11 +47,14 @@ RUN wget -q "https://github.com/renode/renode/releases/download/v${RENODE_VERSIO
     && ln -s /opt/renode/renode /usr/local/bin/renode \
     && ln -s /opt/renode/renode-test /usr/local/bin/renode-test
 
+# Copy voltad binary
+COPY --from=voltad-builder /build/target/release/voltad /usr/local/bin/voltad
+
 # Create volta directories
 RUN mkdir -p /opt/volta/{platforms,firmware,peripherals}
 
-# Expose Renode telnet monitor and GDB server
-EXPOSE 1234 3333
+# Expose ports: Renode telnet, GDB, ZMQ PUB, gRPC
+EXPOSE 1234 3333 5555 50051
 
 COPY containers/mcu/entrypoint.sh /entrypoint.sh
 RUN chmod +x /entrypoint.sh

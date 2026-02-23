@@ -7,6 +7,8 @@ services:
     ports:
       - "${RENODE_TELNET_PORT:-1234}:1234"   # Renode monitor
       - "${RENODE_GDB_PORT:-3333}:3333"       # GDB server
+      - "${VOLTAD_ZMQ_PUB_PORT:-5555}:5555"   # ZMQ PUB (GPIO/UART events)
+      - "${VOLTAD_GRPC_PORT:-50051}:50051"     # gRPC control
     volumes:
       - ./platforms:/opt/volta/platforms:ro
       - ./firmware:/opt/volta/firmware:ro
@@ -20,7 +22,7 @@ services:
       interval: 10s
       timeout: 5s
       retries: 3
-      start_period: 15s
+      start_period: 30s
 
 volumes:
   volta-shm:

@@ -1,0 +1,28 @@
+syntax = "proto3";
+
+package volta;
+
+service VoltaControl {
+  rpc FlashFirmware (FlashRequest) returns (FlashResponse);
+  rpc StartSimulation (StartRequest) returns (StatusResponse);
+  rpc StopSimulation (StopRequest) returns (StatusResponse);
+  rpc GetStatus (StatusRequest) returns (StatusResponse);
+}
+
+message FlashRequest {
+  string elf_path = 1;
+}
+
+message FlashResponse {
+  bool success = 1;
+  string message = 2;
+}
+
+message StartRequest {}
+message StopRequest {}
+message StatusRequest {}
+
+message StatusResponse {
+  string state = 1; // "running", "paused", "stopped"
+  string message = 2;
+}
