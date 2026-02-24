@@ -5,3 +5,4 @@ grpcio-tools==1.68.1
 protobuf==5.29.2
 pyzmq==26.2.0
 python-multipart==0.0.19
+msgpack>=1.0.7

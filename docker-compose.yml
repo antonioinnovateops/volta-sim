@@ -24,43 +24,6 @@ services:
       retries: 3
       start_period: 30s
 
-  volta-ue5:
-    build:
-      context: .
-      dockerfile: containers/ue5/Dockerfile
-      args:
-        GITHUB_TOKEN: ${GITHUB_TOKEN}
-        UE5_BRANCH: ${UE5_BRANCH:-5.4}
-    container_name: volta-ue5
-    depends_on:
-      volta-mcu:
-        condition: service_healthy
-    ports:
-      - "${PIXEL_STREAM_PORT:-8888}:8888"
-      - "${PIXEL_STREAM_SIGNAL_PORT:-8889}:8889"
-    volumes:
-      - volta-shm:/dev/shm
-    deploy:
-      resources:
-        reservations:
-          devices:
-            - driver: nvidia
-              count: 1
-              capabilities: [gpu, graphics, compute, utility, video]
-        limits:
-          memory: 16G
-    environment:
-      - NVIDIA_VISIBLE_DEVICES=all
-      - NVIDIA_DRIVER_CAPABILITIES=all
-    shm_size: '2g'
-    restart: unless-stopped
-    healthcheck:
-      test: ["CMD-SHELL", "curl -sf http://localhost:8888/ || exit 1"]
-      interval: 30s
-      timeout: 10s
-      retries: 5
-      start_period: 120s
-
   volta-api:
     build:
       context: .
@@ -93,7 +56,8 @@ services:
       dockerfile: containers/web/Dockerfile
     container_name: volta-web
     depends_on:
-      - volta-api
+      volta-api:
+        condition: service_healthy
     ports:
       - "${WEB_PORT:-3000}:3000"
     restart: unless-stopped

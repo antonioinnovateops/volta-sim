@@ -1,11 +1,11 @@
 import React from "react";
-import { PixelStreamViewer } from "./components/PixelStreamViewer";
+import { BoardViewer } from "./components/BoardViewer";
 import { GPIOPanel } from "./components/GPIOPanel";
 import { PWMGauge } from "./components/PWMGauge";
 import { ADCPanel } from "./components/ADCPanel";
 import { UARTConsole } from "./components/UARTConsole";
 import { SimulationControls } from "./components/SimulationControls";
-import { useWebSocket } from "./hooks/useWebSocket";
+import { useVoltaState } from "./hooks/useWebSocket";
 
 const styles: Record<string, React.CSSProperties> = {
   container: {
@@ -25,11 +25,28 @@ const styles: Record<string, React.CSSProperties> = {
     justifyContent: "space-between",
     borderBottom: "1px solid #2a2a4a",
   },
+  titleArea: {
+    display: "flex",
+    alignItems: "center",
+    gap: "12px",
+  },
   title: {
     fontSize: "16px",
     fontWeight: 700,
     color: "#e94560",
     letterSpacing: "2px",
+  },
+  connDot: {
+    width: "8px",
+    height: "8px",
+    borderRadius: "50%",
+    display: "inline-block",
+  },
+  connLabel: {
+    fontSize: "10px",
+    color: "#666",
+    textTransform: "uppercase" as const,
+    letterSpacing: "1px",
   },
   stream: {
     background: "#000",
@@ -50,24 +67,42 @@ const styles: Record<string, React.CSSProperties> = {
 };
 
 export function App() {
-  const events = useWebSocket("/api/v1/simulation/ws/events");
+  const state = useVoltaState();
 
   return (
     <div style={styles.container}>
       <div style={styles.header}>
-        <span style={styles.title}>VOLTA-SIM</span>
+        <div style={styles.titleArea}>
+          <span style={styles.title}>VOLTA-SIM</span>
+          <span
+            style={{
+              ...styles.connDot,
+              background: state.connected ? "#00ff00" : "#ff4444",
+              boxShadow: state.connected
+                ? "0 0 6px #00ff00"
+                : "0 0 6px #ff4444",
+            }}
+          />
+          <span style={styles.connLabel}>
+            {state.connected ? "LIVE" : "POLL"}
+          </span>
+        </div>
         <SimulationControls />
       </div>
       <div style={styles.stream}>
-        <PixelStreamViewer />
+        <BoardViewer
+          gpio={state.gpio}
+          pwm={state.pwm}
+          adc={state.adc}
+        />
       </div>
       <div style={styles.sidebar}>
-        <GPIOPanel events={events} />
-        <PWMGauge />
-        <ADCPanel />
+        <GPIOPanel ports={state.gpio} />
+        <PWMGauge channels={state.pwm} />
+        <ADCPanel channels={state.adc} />
       </div>
       <div style={styles.console}>
-        <UARTConsole />
+        <UARTConsole data={state.uart} />
       </div>
     </div>
   );

@@ -26,7 +26,7 @@ else
 fi
 
 # Wait for firmware to run (blinky toggles every 500ms)
-sleep 2
+sleep 3
 
 # 2. Check GPIO shows PD12 activity
 echo ""

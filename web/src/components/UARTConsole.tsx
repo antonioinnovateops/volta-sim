@@ -1,5 +1,9 @@
 import React from "react";
 
+interface UARTConsoleProps {
+  data: string;
+}
+
 const styles: Record<string, React.CSSProperties> = {
   container: {
     display: "flex",
@@ -19,14 +23,6 @@ const styles: Record<string, React.CSSProperties> = {
     textTransform: "uppercase" as const,
     letterSpacing: "1px",
     color: "#e94560",
-  },
-  channelSelect: {
-    background: "#1a1a2e",
-    color: "#ccc",
-    border: "1px solid #333",
-    borderRadius: "4px",
-    padding: "2px 6px",
-    fontSize: "11px",
   },
   output: {
     flex: 1,
@@ -48,28 +44,8 @@ const styles: Record<string, React.CSSProperties> = {
   },
 };
 
-export function UARTConsole() {
-  const [channel, setChannel] = React.useState(1); // USART2 = index 1
-  const [data, setData] = React.useState("");
+export function UARTConsole({ data }: UARTConsoleProps) {
   const outputRef = React.useRef<HTMLDivElement>(null);
-
-  React.useEffect(() => {
-    const fetchUart = async () => {
-      try {
-        const res = await fetch(`/api/v1/uart/${channel}/buffer`);
-        const json = await res.json();
-        if (json.data) {
-          setData(json.data);
-        }
-      } catch {
-        // API unavailable
-      }
-    };
-
-    fetchUart();
-    const interval = setInterval(fetchUart, 500);
-    return () => clearInterval(interval);
-  }, [channel]);
 
   React.useEffect(() => {
     if (outputRef.current) {
@@ -80,18 +56,7 @@ export function UARTConsole() {
   return (
     <div style={styles.container}>
       <div style={styles.header}>
-        <span style={styles.heading}>UART Console</span>
-        <select
-          style={styles.channelSelect}
-          value={channel}
-          onChange={(e) => setChannel(Number(e.target.value))}
-        >
-          {[0, 1, 2, 3, 4, 5, 6, 7].map((ch) => (
-            <option key={ch} value={ch}>
-              UART{ch} {ch === 1 ? "(USART2)" : ""}
-            </option>
-          ))}
-        </select>
+        <span style={styles.heading}>UART Console (USART2)</span>
       </div>
       <div ref={outputRef} style={styles.output}>
         {data || <span style={styles.empty}>No UART data received</span>}

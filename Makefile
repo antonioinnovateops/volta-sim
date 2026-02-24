@@ -1,8 +1,7 @@
 .PHONY: build up down flash logs clean firmware test test-pwm test-blinky
-.PHONY: ue5-engine ue5-project stream check-gpu
 .PHONY: api web cli-install
 
-COMPOSE := docker-compose
+COMPOSE := WEB_PORT=3001 docker-compose
 FILE ?=
 
 # --- Container targets ---
@@ -19,25 +18,6 @@ down:
 logs:
 	$(COMPOSE) logs -f
 
-# --- UE5 targets ---
-
-ue5-engine: check-gpu
-	@echo "Building UE5 engine (this takes 2-4 hours on first run)..."
-	docker build \
-		--target ue5-engine \
-		--build-arg GITHUB_TOKEN=$${GITHUB_TOKEN} \
-		--build-arg UE5_BRANCH=$${UE5_BRANCH:-5.4} \
-		-t volta-ue5-engine:$${UE5_BRANCH:-5.4} \
-		-f containers/ue5/Dockerfile .
-
-ue5-project: check-gpu
-	@echo "Building VoltaSim UE5 project..."
-	$(COMPOSE) build volta-ue5
-
-stream: up
-	@echo "Pixel Streaming available at http://localhost:$${PIXEL_STREAM_PORT:-8888}"
-	@echo "Web dashboard available at http://localhost:$${WEB_PORT:-3000}"
-
 # --- API + Web targets ---
 
 api:
@@ -53,13 +33,6 @@ cli-install:
 	ln -sf $(CURDIR)/cli/volta /usr/local/bin/volta 2>/dev/null || \
 		ln -sf $(CURDIR)/cli/volta ~/.local/bin/volta
 	@echo "Done. Run: volta status"
-
-check-gpu:
-	@echo "Checking GPU availability..."
-	@nvidia-smi > /dev/null 2>&1 || \
-		(echo "WARNING: nvidia-smi not found. GPU passthrough may not work." && \
-		 echo "For CI, use NullRHI: add -nullrhi to UE5 launch args." && \
-		 echo "")
 
 # --- Firmware targets ---
 
@@ -84,9 +57,6 @@ endif
 
 shell:
 	docker exec -it volta-mcu bash
-
-shell-ue5:
-	docker exec -it volta-ue5 bash
 
 monitor:
 	docker exec -it volta-mcu socat - TCP:localhost:1234

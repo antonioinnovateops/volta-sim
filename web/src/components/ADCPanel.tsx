@@ -1,11 +1,8 @@
 import React from "react";
+import type { AdcChannel } from "../types";
 
-interface AdcChannel {
-  channel: number;
-  raw_value: number;
-  voltage: number;
-  enabled: boolean;
-  sample_rate: number;
+interface ADCPanelProps {
+  channels: AdcChannel[];
 }
 
 const styles: Record<string, React.CSSProperties> = {
@@ -80,7 +77,7 @@ const styles: Record<string, React.CSSProperties> = {
     textAlign: "right" as const,
     fontFamily: "monospace",
   },
-  error: {
+  empty: {
     color: "#666",
     fontSize: "12px",
     padding: "8px",
@@ -90,32 +87,9 @@ const styles: Record<string, React.CSSProperties> = {
 const VREF = 3.3;
 const MAX_RAW = 4095;
 
-export function ADCPanel() {
-  const [channels, setChannels] = React.useState<AdcChannel[]>([]);
-  const [error, setError] = React.useState<string | null>(null);
+export function ADCPanel({ channels }: ADCPanelProps) {
   const [injectVoltage, setInjectVoltage] = React.useState(0);
   const [injectChannel, setInjectChannel] = React.useState(0);
-
-  React.useEffect(() => {
-    const fetchAdc = async () => {
-      try {
-        const res = await fetch("/api/v1/adc");
-        const data = await res.json();
-        if (data.error) {
-          setError(data.error);
-        } else {
-          setChannels(data.channels || []);
-          setError(null);
-        }
-      } catch {
-        setError("API unavailable");
-      }
-    };
-
-    fetchAdc();
-    const interval = setInterval(fetchAdc, 200); // Poll at 5Hz
-    return () => clearInterval(interval);
-  }, []);
 
   const handleInject = async () => {
     try {
@@ -125,18 +99,9 @@ export function ADCPanel() {
         body: JSON.stringify({ voltage: injectVoltage }),
       });
     } catch {
-      // Will be shown on next poll
+      // Will be reflected on next state update
     }
   };
-
-  if (error) {
-    return (
-      <div style={styles.container}>
-        <div style={styles.heading}>ADC Input</div>
-        <div style={styles.error}>{error}</div>
-      </div>
-    );
-  }
 
   return (
     <div style={styles.container}>
@@ -161,10 +126,9 @@ export function ADCPanel() {
         </div>
       ))}
       {channels.length === 0 && (
-        <div style={styles.error}>No active ADC channels</div>
+        <div style={styles.empty}>No active ADC channels</div>
       )}
 
-      {/* Injection controls */}
       <div style={{ ...styles.heading, marginTop: "16px" }}>Inject</div>
       <div style={styles.injectRow}>
         <span style={{ fontSize: "11px", color: "#aaa" }}>CH</span>

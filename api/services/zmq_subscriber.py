@@ -4,6 +4,7 @@ import asyncio
 import json
 import threading
 import zmq
+import msgpack
 
 
 class ZmqSubscriber:
@@ -36,10 +37,9 @@ class ZmqSubscriber:
                 if len(frames) >= 2:
                     topic = frames[0].decode("utf-8", errors="replace")
                     payload = frames[1]
-                    event = {
-                        "topic": topic,
-                        "data": json.loads(payload) if payload else {},
-                    }
+                    # voltad publishes MessagePack (rmp_serde::to_vec)
+                    data = msgpack.unpackb(payload, raw=False) if payload else {}
+                    event = {"topic": topic, "data": data}
                     self._ws_manager.broadcast_sync(json.dumps(event))
             except zmq.Again:
                 continue

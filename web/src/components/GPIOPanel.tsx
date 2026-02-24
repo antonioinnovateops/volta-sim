@@ -1,17 +1,8 @@
 import React from "react";
+import type { GpioState } from "../types";
 
 interface GPIOPanelProps {
-  events: unknown[];
-}
-
-interface PinState {
-  pin: number;
-  output: string;
-  input: string;
-}
-
-interface PortState {
-  [port: string]: { pins: PinState[] };
+  ports: GpioState;
 }
 
 const LED_COLORS: Record<number, string> = {
@@ -64,47 +55,14 @@ const styles: Record<string, React.CSSProperties> = {
   pinState: {
     fontWeight: 600,
   },
-  error: {
+  empty: {
     color: "#666",
     fontSize: "12px",
     padding: "8px",
   },
 };
 
-export function GPIOPanel({ events: _events }: GPIOPanelProps) {
-  const [ports, setPorts] = React.useState<PortState>({});
-  const [error, setError] = React.useState<string | null>(null);
-
-  React.useEffect(() => {
-    const fetchGpio = async () => {
-      try {
-        const res = await fetch("/api/v1/gpio");
-        const data = await res.json();
-        if (data.error) {
-          setError(data.error);
-        } else {
-          setPorts(data.ports || {});
-          setError(null);
-        }
-      } catch {
-        setError("API unavailable");
-      }
-    };
-
-    fetchGpio();
-    const interval = setInterval(fetchGpio, 200); // Poll at 5Hz
-    return () => clearInterval(interval);
-  }, []);
-
-  if (error) {
-    return (
-      <div style={styles.container}>
-        <div style={styles.heading}>GPIO State</div>
-        <div style={styles.error}>{error}</div>
-      </div>
-    );
-  }
-
+export function GPIOPanel({ ports }: GPIOPanelProps) {
   return (
     <div style={styles.container}>
       <div style={styles.heading}>GPIO State</div>
@@ -123,7 +81,10 @@ export function GPIOPanel({ events: _events }: GPIOPanelProps) {
                     boxShadow: isHigh ? `0 0 6px ${color}` : "none",
                   }}
                 />
-                <span style={styles.pinName}>P{port}{pin.pin}</span>
+                <span style={styles.pinName}>
+                  P{port}
+                  {pin.pin}
+                </span>
                 <span
                   style={{
                     ...styles.pinState,
@@ -138,7 +99,7 @@ export function GPIOPanel({ events: _events }: GPIOPanelProps) {
         </div>
       ))}
       {Object.keys(ports).length === 0 && (
-        <div style={styles.error}>No active pins</div>
+        <div style={styles.empty}>No active pins</div>
       )}
     </div>
   );
