@@ -109,6 +109,28 @@ impl ShmRegion {
         adc::AdcChannelState::from_shm(&self.mmap, channel)
     }
 
+    /// Write UART data to SHM ring buffer (received from Renode socket terminal).
+    pub fn write_uart_data(&mut self, channel: usize, data: &[u8]) {
+        let base = UART_OFFSET + channel * UART_CHANNEL_SIZE;
+
+        // Read current write_head (u32 LE at base)
+        let write_head = u32::from_le_bytes(
+            self.mmap[base..base + 4].try_into().unwrap(),
+        );
+
+        // Write each byte into the ring buffer
+        let data_base = base + UART_HEADER_SIZE;
+        let mut head = write_head;
+        for &byte in data {
+            let idx = data_base + (head as usize % UART_BUF_SIZE);
+            self.mmap[idx] = byte;
+            head = head.wrapping_add(1);
+        }
+
+        // Update write_head
+        self.mmap[base..base + 4].copy_from_slice(&head.to_le_bytes());
+    }
+
     /// Write an ADC value to SHM (for sensor injection from API/UE5).
     pub fn write_adc_value(&mut self, channel: usize, raw_value: u16, voltage: f32) {
         let base = ADC_OFFSET + channel * ADC_CHANNEL_SIZE;

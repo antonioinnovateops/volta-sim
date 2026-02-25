@@ -132,7 +132,7 @@ fn main() -> Result<()> {
 }
 
 fn shm_monitor_loop(
-    shm: ShmRegion,
+    mut shm: ShmRegion,
     zmq_pub: ZmqPublisher,
     uart_rx: mpsc::Receiver<Vec<u8>>,
     poll_us: u64,
@@ -192,16 +192,18 @@ fn shm_monitor_loop(
     loop {
         std::thread::sleep(interval);
 
-        // Check for UART data from socket terminal
+        // Check for UART data from socket terminal (USART2 = channel 1)
         while let Ok(data) = uart_rx.try_recv() {
             let text = String::from_utf8_lossy(&data);
             debug!(
-                "UART[2] data: {:?} ({})",
+                "UART[1] data: {:?} ({})",
                 text.trim(),
                 data.len()
             );
+            // Write to SHM ring buffer so the REST API can serve it
+            shm.write_uart_data(1, &data);
             let event = UartDataEvent {
-                channel: 2,
+                channel: 1,
                 data,
             };
             if let Err(e) = zmq_pub.publish_uart_data(&event) {
