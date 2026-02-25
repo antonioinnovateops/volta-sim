@@ -39,45 +39,36 @@ else
   fail "GPIO endpoint broken: $GPIO"
 fi
 
-# Check for port D (PD12 = green LED)
-if echo "$GPIO" | grep -q '"D"'; then
-  pass "Port D has active pins"
+# Take multiple samples over 1.2s to detect PD12 toggling
+# Blinky toggles at 500ms so we should see at least one HIGH
+FOUND_HIGH=false
+FOUND_LOW=false
+for i in 1 2 3 4; do
+  SAMPLE=$(curl -sf "$API/gpio/D")
+  STATE=$(echo "$SAMPLE" | python3 -c "
+import sys,json
+data=json.load(sys.stdin)
+pins=data.get('D',{}).get('pins',[])
+p12=[p for p in pins if p['pin']==12]
+print(p12[0]['output'] if p12 else 'MISSING')
+" 2>/dev/null || echo "ERROR")
+  if [ "$STATE" = "HIGH" ]; then FOUND_HIGH=true; fi
+  if [ "$STATE" = "LOW" ] || [ "$STATE" = "MISSING" ]; then FOUND_LOW=true; fi
+  sleep 0.3
+done
+
+if $FOUND_HIGH; then
+  pass "PD12 detected HIGH"
 else
-  fail "Port D not found in GPIO state"
+  fail "PD12 never HIGH in 4 samples"
 fi
 
-# Take two samples 600ms apart to verify toggling
-GPIO1=$(curl -sf "$API/gpio/D")
-sleep 0.6
-GPIO2=$(curl -sf "$API/gpio/D")
-
-PIN12_1=$(echo "$GPIO1" | python3 -c "
-import sys,json
-data=json.load(sys.stdin)
-pins=data.get('D',{}).get('pins',[])
-p12=[p for p in pins if p['pin']==12]
-print(p12[0]['output'] if p12 else 'MISSING')
-" 2>/dev/null || echo "ERROR")
-
-PIN12_2=$(echo "$GPIO2" | python3 -c "
-import sys,json
-data=json.load(sys.stdin)
-pins=data.get('D',{}).get('pins',[])
-p12=[p for p in pins if p['pin']==12]
-print(p12[0]['output'] if p12 else 'MISSING')
-" 2>/dev/null || echo "ERROR")
-
-if [ "$PIN12_1" != "$PIN12_2" ]; then
-  pass "PD12 toggling ($PIN12_1 -> $PIN12_2)"
-elif [ "$PIN12_1" = "MISSING" ]; then
-  fail "PD12 not found in GPIO state"
+if $FOUND_HIGH && $FOUND_LOW; then
+  pass "PD12 toggling (seen HIGH and LOW/off)"
+elif $FOUND_HIGH; then
+  pass "PD12 active (always HIGH in samples)"
 else
-  # Toggling might be in-sync with our reads; just check it's HIGH or LOW
-  if [ "$PIN12_1" = "HIGH" ] || [ "$PIN12_1" = "LOW" ]; then
-    pass "PD12 active (sampled same state: $PIN12_1)"
-  else
-    fail "PD12 unexpected state: $PIN12_1"
-  fi
+  fail "PD12 not active"
 fi
 
 # 3. Health check
