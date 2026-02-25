@@ -2,7 +2,7 @@ fastapi==0.115.6
 uvicorn[standard]==0.34.0
 grpcio==1.68.1
 grpcio-tools==1.68.1
-protobuf==5.29.2
+protobuf==5.29.6
 pyzmq==26.2.0
 python-multipart==0.0.19
 msgpack>=1.0.7
