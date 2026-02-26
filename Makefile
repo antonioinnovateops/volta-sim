@@ -1,5 +1,5 @@
 .PHONY: build up down flash logs clean firmware test test-pwm test-blinky
-.PHONY: api web cli-install ue5-build ue5-up ue5-down ue5-logs
+.PHONY: api web cli-install ue5-package ue5-engine ue5-build ue5-up ue5-down ue5-logs
 
 COMPOSE := WEB_PORT=3001 docker-compose
 COMPOSE_UE5 := $(COMPOSE) -f docker-compose.yml -f docker-compose.ue5.yml
@@ -37,13 +37,34 @@ cli-install:
 
 # --- UE5 Pixel Streaming (optional, requires NVIDIA GPU + packaged game) ---
 
+UE_IMAGE ?= ghcr.io/epicgames/unreal-engine:dev-5.4
+
+ue5-package:
+	@echo "Packaging VoltaSim for Linux..."
+	@echo "  UE_IMAGE=$(UE_IMAGE)"
+	@echo "  Override: make ue5-package UE_IMAGE=adamrehn/ue4-minimal:5.4.4"
+	docker build -f containers/ue5/Dockerfile.package \
+		--build-arg UE_IMAGE=$(UE_IMAGE) \
+		-t volta-packager .
+	@mkdir -p packaged-game
+	docker run --rm -v $$(pwd)/packaged-game:/output volta-packager \
+		sh -c "cp -r /game/* /output/ 2>/dev/null || true"
+	@echo "Packaged game in packaged-game/"
+
+ue5-engine:
+	@echo "Building UE5 engine from source (6-12 hours)..."
+	@echo "  This creates adamrehn/ue4-minimal:5.4.4 Docker image"
+	ue4-docker build 5.4.4 --target minimal \
+		--exclude ddc --exclude debug --exclude templates \
+		-username $$(git config user.name 2>/dev/null || echo "user") \
+		-password $$(gh auth token)
+
 ue5-build:
 	@echo "Building UE5 containers (signaling + runtime)..."
 	@test -d packaged-game && test "$$(ls -A packaged-game/ 2>/dev/null | grep -v .gitkeep)" != "" \
 		|| (echo "ERROR: No packaged game in packaged-game/." && \
-		    echo "  1. Open engine/VoltaSim.uproject in UE5 Editor" && \
-		    echo "  2. Package for Linux Shipping" && \
-		    echo "  3. Copy output to packaged-game/" && exit 1)
+		    echo "  Run: make ue5-package  (requires Epic Games Docker image)" && \
+		    echo "  Or manually: package in UE5 Editor → copy to packaged-game/" && exit 1)
 	$(COMPOSE_UE5) build volta-ue5-signaling volta-ue5
 
 ue5-up: up

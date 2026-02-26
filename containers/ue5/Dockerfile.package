@@ -1,0 +1,52 @@
+# Volta-Sim UE5 Packaging Container
+#
+# Compiles and packages VoltaSim for Linux Shipping.
+#
+# Base image (UE_IMAGE build arg) must contain a full UE5 Installed Build
+# with RunUAT.sh, UnrealBuildTool, and shader compiler. Options:
+#
+#   A) Epic Games Docker image (fast, ~30 min):
+#      Requires: Classic PAT with read:packages scope + Epic Games org
+#      echo YOUR_PAT | docker login ghcr.io -u YOUR_USERNAME --password-stdin
+#      docker build --build-arg UE_IMAGE=ghcr.io/epicgames/unreal-engine:dev-5.4 ...
+#
+#   B) ue4-docker built image (after 6-12 hour source build):
+#      pipx install ue4-docker
+#      ue4-docker build 5.4.4 --target minimal --exclude ddc --exclude debug \
+#        --exclude templates -username YOUR_GH_USER -password YOUR_GH_TOKEN
+#      docker build --build-arg UE_IMAGE=adamrehn/ue4-minimal:5.4.4 ...
+#
+# Usage:
+#   docker build -f containers/ue5/Dockerfile.package \
+#       --build-arg UE_IMAGE=ghcr.io/epicgames/unreal-engine:dev-5.4 \
+#       -t volta-packager .
+#   docker run --rm -v $(pwd)/packaged-game:/output volta-packager
+
+ARG UE_IMAGE=ghcr.io/epicgames/unreal-engine:dev-5.4
+
+FROM ${UE_IMAGE} AS builder
+
+# Detect available user (Epic image uses ue4, custom may use root)
+USER root
+RUN useradd -ms /bin/bash builduser 2>/dev/null || true
+RUN if id ue4 >/dev/null 2>&1; then \
+        echo "Using existing ue4 user"; \
+    else \
+        echo "Using builduser"; \
+    fi
+
+# Use non-root user for UBT (it refuses to run as root)
+USER 1000
+
+# Copy project source
+COPY --chown=1000:1000 engine/ /opt/volta/engine/
+COPY --chown=1000:1000 containers/ue5/package.sh /opt/volta/package.sh
+
+# Run the packaging script
+RUN chmod +x /opt/volta/package.sh && \
+    /opt/volta/package.sh
+
+# --- Output stage: just the packaged game ---
+FROM ubuntu:22.04 AS output
+COPY --from=builder /opt/volta/packaged/ /game/
+CMD ["echo", "Packaged game is in /game/. Mount a volume to extract: docker run --rm -v ./packaged-game:/output volta-packager cp -r /game/ /output/"]
