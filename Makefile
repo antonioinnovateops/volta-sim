@@ -1,7 +1,8 @@
 .PHONY: build up down flash logs clean firmware test test-pwm test-blinky
-.PHONY: api web cli-install
+.PHONY: api web cli-install ue5-build ue5-up ue5-down ue5-logs
 
 COMPOSE := WEB_PORT=3001 docker-compose
+COMPOSE_UE5 := $(COMPOSE) -f docker-compose.yml -f docker-compose.ue5.yml
 FILE ?=
 
 # --- Container targets ---
@@ -33,6 +34,29 @@ cli-install:
 	ln -sf $(CURDIR)/cli/volta /usr/local/bin/volta 2>/dev/null || \
 		ln -sf $(CURDIR)/cli/volta ~/.local/bin/volta
 	@echo "Done. Run: volta status"
+
+# --- UE5 Pixel Streaming (optional, requires NVIDIA GPU + packaged game) ---
+
+ue5-build:
+	@echo "Building UE5 containers (signaling + runtime)..."
+	@test -d packaged-game && test "$$(ls -A packaged-game/ 2>/dev/null | grep -v .gitkeep)" != "" \
+		|| (echo "ERROR: No packaged game in packaged-game/." && \
+		    echo "  1. Open engine/VoltaSim.uproject in UE5 Editor" && \
+		    echo "  2. Package for Linux Shipping" && \
+		    echo "  3. Copy output to packaged-game/" && exit 1)
+	$(COMPOSE_UE5) build volta-ue5-signaling volta-ue5
+
+ue5-up: up
+	@echo "Starting UE5 Pixel Streaming..."
+	$(COMPOSE_UE5) up -d volta-ue5-signaling volta-ue5
+	@echo "Pixel Streaming: http://localhost:$${PIXEL_STREAM_PORT:-8888}"
+	@echo "Web dashboard:   http://localhost:3001"
+
+ue5-down:
+	$(COMPOSE_UE5) down
+
+ue5-logs:
+	$(COMPOSE_UE5) logs -f volta-ue5 volta-ue5-signaling
 
 # --- Firmware targets ---
 

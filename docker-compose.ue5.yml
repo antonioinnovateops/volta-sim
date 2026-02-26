@@ -1,21 +1,51 @@
-# Optional UE5 Pixel Streaming service
-# Usage: docker-compose -f docker-compose.yml -f docker-compose.ue5.yml up
-# Requires: GITHUB_TOKEN with Epic Games organization access
+# UE5 Pixel Streaming — optional overlay
+#
+# Usage:
+#   docker-compose -f docker-compose.yml -f docker-compose.ue5.yml up -d
+#
+# Prerequisites:
+#   1. Package VoltaSim project for Linux Shipping in UE5 Editor
+#   2. Copy packaged output to volta-sim/packaged-game/
+#   3. NVIDIA GPU + Container Toolkit installed
+#
+# Architecture:
+#   volta-ue5-signaling  (Node.js, no GPU)  — WebRTC signaling on port 8888
+#   volta-ue5            (UE5 runtime, GPU)  — renders + encodes via NVENC
+#
+# Access: http://localhost:8888 (Pixel Streaming web player)
+
 services:
+  volta-ue5-signaling:
+    build:
+      context: .
+      dockerfile: containers/ue5-signaling/Dockerfile
+    container_name: volta-ue5-signaling
+    ports:
+      - "${PIXEL_STREAM_PORT:-8888}:80"
+      - "8889:8889"
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD-SHELL", "curl -so /dev/null -w '%{http_code}' http://localhost:80/ | grep -q '[0-9]'"]
+      interval: 10s
+      timeout: 5s
+      retries: 3
+      start_period: 10s
+
   volta-ue5:
     build:
       context: .
       dockerfile: containers/ue5/Dockerfile
-      args:
-        GITHUB_TOKEN: ${GITHUB_TOKEN}
-        UE5_BRANCH: ${UE5_BRANCH:-5.4}
     container_name: volta-ue5
     depends_on:
       volta-mcu:
         condition: service_healthy
-    ports:
-      - "${PIXEL_STREAM_PORT:-8888}:8888"
-      - "${PIXEL_STREAM_SIGNAL_PORT:-8889}:8889"
+      volta-ue5-signaling:
+        condition: service_healthy
+    environment:
+      - NVIDIA_VISIBLE_DEVICES=all
+      - NVIDIA_DRIVER_CAPABILITIES=graphics,compute,utility,video
+      - SIGNAL_HOST=127.0.0.1
+      - WEBRTC_PORT=8889
     volumes:
       - volta-shm:/dev/shm
     deploy:
@@ -25,16 +55,11 @@ services:
             - driver: nvidia
               count: 1
               capabilities: [gpu, graphics, compute, utility, video]
-        limits:
-          memory: 16G
-    environment:
-      - NVIDIA_VISIBLE_DEVICES=all
-      - NVIDIA_DRIVER_CAPABILITIES=all
-    shm_size: '2g'
+    network_mode: host
     restart: unless-stopped
     healthcheck:
-      test: ["CMD-SHELL", "curl -sf http://localhost:8888/ || exit 1"]
+      test: ["CMD-SHELL", "test -f /opt/volta/game/VoltaSim.sh || test -f /opt/volta/game/LinuxServer/VoltaSim || exit 0"]
       interval: 30s
       timeout: 10s
-      retries: 5
-      start_period: 120s
+      retries: 3
+      start_period: 60s

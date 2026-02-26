@@ -32,6 +32,10 @@ engine/DerivedDataCache/
 # Docker
 .env
 
+# UE5 packaged game (large binary, do not commit)
+packaged-game/*
+!packaged-game/.gitkeep
+
 # IDE
 .vscode/
 .idea/

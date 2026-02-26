@@ -1,96 +1,47 @@
-# Volta-Sim UE5 Pixel Streaming Container
-# Multi-stage build: source -> engine -> project -> runtime
+# Volta-Sim UE5 Pixel Streaming Runtime Container
 #
-# Build stages separately for caching:
-#   docker build --target ue5-engine -t volta-ue5-engine:5.4 ...   (~2-4 hours, one-time)
-#   docker build -t volta-ue5 ...                                   (~minutes for project)
+# This runs a PRE-PACKAGED UE5 Linux build. It does NOT build UE5 from source.
+#
+# Workflow:
+#   1. Install UE5 on your dev machine (Epic Games Launcher or from source)
+#   2. Open engine/VoltaSim.uproject in the editor, build for Linux Shipping
+#   3. Copy the packaged output to packaged-game/LinuxServer/
+#   4. docker-compose -f docker-compose.yml -f docker-compose.ue5.yml up
+#
+# Or use the helper: make ue5-package (builds on host) then make ue5-up
 
-ARG UE5_BRANCH=5.4
+FROM adamrehn/ue4-runtime:22.04-cudagl12
 
-# ==============================================================================
-# Stage 1: Clone UE5 source (requires GitHub token with EpicGames org access)
-# ==============================================================================
-FROM ubuntu:22.04 AS ue5-source
-
-ARG GITHUB_TOKEN
-ARG UE5_BRANCH
-
-RUN apt-get update && apt-get install -y --no-install-recommends \
-    git ca-certificates curl \
-    libicu70 libicu-dev \
-    && rm -rf /var/lib/apt/lists/*
-
-RUN git clone --depth 1 --branch ${UE5_BRANCH} \
-    https://${GITHUB_TOKEN}@github.com/EpicGames/UnrealEngine.git /ue5
-
-WORKDIR /ue5
-RUN ./Setup.sh && ./GenerateProjectFiles.sh
-
-# ==============================================================================
-# Stage 2: Build UE5 engine (heavy, cache this layer)
-# ==============================================================================
-FROM ue5-source AS ue5-engine
-
-RUN apt-get update && apt-get install -y --no-install-recommends \
-    build-essential mono-devel clang dos2unix \
-    libssl-dev libcurl4-openssl-dev \
-    && rm -rf /var/lib/apt/lists/*
-
-WORKDIR /ue5
-RUN make
-
-# ==============================================================================
-# Stage 3: Build VoltaSim project
-# ==============================================================================
-FROM ue5-engine AS volta-project-builder
-
-# Copy project into UE5 tree
-COPY engine/ /ue5/VoltaSim/
-
-WORKDIR /ue5
-RUN ./Engine/Build/BatchFiles/RunUAT.sh BuildCookRun \
-    -project=/ue5/VoltaSim/VoltaSim.uproject \
-    -noP4 -platform=Linux -clientconfig=Shipping \
-    -cook -allmaps -build -stage -pak -archive \
-    -archivedirectory=/opt/volta/packaged \
-    -unrealexe=/ue5/Engine/Binaries/Linux/UnrealEditor-Cmd
-
-# ==============================================================================
-# Stage 4: Runtime (minimal image with packaged game)
-# ==============================================================================
-FROM nvidia/cuda:12.2.2-runtime-ubuntu22.04 AS runtime
-
-ENV DEBIAN_FRONTEND=noninteractive
 ENV NVIDIA_VISIBLE_DEVICES=all
-ENV NVIDIA_DRIVER_CAPABILITIES=graphics,compute,utility
+ENV NVIDIA_DRIVER_CAPABILITIES=graphics,compute,utility,video
+ENV DEBIAN_FRONTEND=noninteractive
 
-# System packages
+# Vulkan ICD + display dependencies
 RUN apt-get update && apt-get install -y --no-install-recommends \
-    xvfb vulkan-tools mesa-vulkan-drivers libvulkan1 \
-    curl ca-certificates \
+    libvulkan1 vulkan-tools mesa-vulkan-drivers \
+    libegl1 libgl1 libgles2 \
+    xvfb x11-utils \
+    socat curl \
     && rm -rf /var/lib/apt/lists/*
 
-# Node.js for signaling server
-RUN curl -fsSL https://deb.nodesource.com/setup_20.x | bash - \
-    && apt-get install -y --no-install-recommends nodejs \
-    && rm -rf /var/lib/apt/lists/*
+# NVIDIA Vulkan ICD
+RUN mkdir -p /etc/vulkan/icd.d && \
+    echo '{"file_format_version":"1.0.0","ICD":{"library_path":"libGLX_nvidia.so.0","api_version":"1.3"}}' \
+    > /etc/vulkan/icd.d/nvidia_icd.json
 
-# Copy packaged game from builder
-COPY --from=volta-project-builder /opt/volta/packaged /opt/volta/game
+WORKDIR /opt/volta
 
-# Copy Pixel Streaming signaling server from UE5 source
-COPY --from=volta-project-builder \
-    /ue5/Engine/Source/Programs/PixelStreaming/WebServers/SignallingWebServer \
-    /opt/volta/signaling
+# Copy pre-packaged game (built on dev machine, NOT in Docker)
+# This directory should contain the output of RunUAT BuildCookRun
+COPY packaged-game/ /opt/volta/game/
 
-WORKDIR /opt/volta/signaling
-RUN npm install
-
-# Copy config and entrypoint
-COPY containers/ue5/pixel_streaming.json /opt/volta/signaling/config.json
+# Copy entrypoint
 COPY containers/ue5/entrypoint.sh /opt/volta/entrypoint.sh
 RUN chmod +x /opt/volta/entrypoint.sh
 
-EXPOSE 8888 8889
+# SHM for reading Volta peripheral state
+VOLUME ["/dev/shm"]
+
+EXPOSE 8888
 
 ENTRYPOINT ["/opt/volta/entrypoint.sh"]
